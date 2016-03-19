@@ -13,13 +13,14 @@ public class BasicMachineActor extends KonstructsActor {
 
     View view;
     InventoryView inventoryView;
-    List<Stack> inventoryList;
+    Inventory inventory;
 
     public BasicMachineActor(ActorRef universe) {
         super(universe);
-        inventoryView = new InventoryView(2, 2, 1, 1);
-        view = View.Empty().add(inventoryView, Inventory.createEmpty(1));
-        inventoryList = new ArrayList();
+
+        inventoryView = new InventoryView(2, 4, 1, 1);
+        inventory = Inventory.createEmpty(1);
+        view = View.Empty().add(inventoryView, inventory);
     }
 
     @Override
@@ -52,12 +53,8 @@ public class BasicMachineActor extends KonstructsActor {
     public void onInteractTertiaryFilter(InteractTertiaryFilter filter) {
 
         if (filter.message().block().get().type().namespace().equals("org/konstructs/basicmachines")) {
-            System.out.println("hello");
-        } else {
-            System.out.println("bar");
+            filter.message().sender().tell(new ConnectView(getSelf(), view), getSelf());
         }
-
-        filter.message().sender().tell(new ConnectView(getSelf(), view), getSelf());
 
         filter.continueWith(filter.message(), getSender());
     }
@@ -66,17 +63,22 @@ public class BasicMachineActor extends KonstructsActor {
 
         // Translate the selected position to our inventories local positions.
         int pos = inventoryView.translate(stack.to());
+        inventory = inventory.withSlot(pos, stack.stack());
 
-        // Place the item there
-        inventoryList.clear();
-        inventoryList.add(pos, stack.stack());
-        view = view.Empty().add(inventoryView, new Inventory(inventoryList));
-        getSender().tell(new UpdateView(view), getSelf());
+        sendViewStateToPlayer();
     }
 
     public void onRemoveViewStack(RemoveViewStack stack) {
-        inventoryView.translate(stack.from());
-        getSender().tell(new ReceiveStack(inventoryList.get(inventoryView.translate(stack.from()))), getSelf());
+        int pos = inventoryView.translate(stack.from());
+        getSender().tell(new ReceiveStack(inventory.stackOption(pos).get()), getSelf());
+        inventory = inventory.withoutSlot(pos);
+
+        sendViewStateToPlayer();
+    }
+
+    public void sendViewStateToPlayer() {
+        view = view.Empty().add(inventoryView, inventory);
+        getSender().tell(new UpdateView(view), getSelf());
     }
 
     @PluginConstructor

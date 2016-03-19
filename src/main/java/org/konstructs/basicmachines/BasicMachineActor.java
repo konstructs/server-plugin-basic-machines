@@ -7,26 +7,30 @@ import konstructs.plugin.KonstructsActor;
 import konstructs.plugin.PluginConstructor;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class BasicMachineActor extends KonstructsActor {
+
+    static final String PLUGIN_NS = "org/konstructs/basicmachines";
 
     View view;
     InventoryView inventoryView;
     Inventory inventory;
+    Map<Position, ActorRef> playerActorMapping;
 
     public BasicMachineActor(ActorRef universe) {
         super(universe);
 
-        inventoryView = new InventoryView(2, 4, 1, 1);
-        inventory = Inventory.createEmpty(1);
+        playerActorMapping = new HashMap<>();
+        inventoryView = new InventoryView(2, 4, 1, 3);
+        inventory = Inventory.createEmpty(3);
         view = View.Empty().add(inventoryView, inventory);
     }
 
     @Override
     public void onReceive(Object message) {
-
-        System.out.println("GOT: " + message);
 
         if (message instanceof InteractTertiaryFilter) {
             onInteractTertiaryFilter((InteractTertiaryFilter)message);
@@ -47,13 +51,23 @@ public class BasicMachineActor extends KonstructsActor {
     public void onEventBlockRemoved(EventBlockRemoved block) {}
 
     @Override
-    public void onEventBlockUpdated(EventBlockUpdated blockEvent) {
+    public void onEventBlockUpdated(EventBlockUpdated blockEvent) {}
+
+    @Override
+    public void onBlockViewed(BlockViewed blockPosition) {
+        if (blockPosition.block().type().namespace().equals(PLUGIN_NS)) {
+            if (playerActorMapping.containsKey(blockPosition.pos())) {
+                playerActorMapping.get(blockPosition.pos())
+                        .tell(new ConnectView(getSelf(), view), getSelf());
+            }
+        }
     }
 
     public void onInteractTertiaryFilter(InteractTertiaryFilter filter) {
-
-        if (filter.message().block().get().type().namespace().equals("org/konstructs/basicmachines")) {
-            filter.message().sender().tell(new ConnectView(getSelf(), view), getSelf());
+        if (filter.message().pos().isDefined()) {
+            // Save actor ref for later and ask the server for the block
+            playerActorMapping.put(filter.message().pos().get(), filter.message().sender());
+            viewBlock(filter.message().pos().get());
         }
 
         filter.continueWith(filter.message(), getSender());
